@@ -180,12 +180,30 @@ button {
 
 .block {
   display: block;
+  /* Fallback for browsers without color-mix(): the same accent-border
+     treatment this app used before this fill was added. */
   background: #f8f9fb;
+  color: #1a1a1a;
   border: 1px solid #ccc;
   border-left: 4px solid var(--course-colour, #0b5fff);
   border-radius: 0.2rem;
   padding: 0.15rem 0.3rem;
   margin-bottom: 0.2rem;
+}
+
+/* Tints each block with its own course's stable catalogue colour — a fixed,
+   deterministic derivation (22% course colour mixed into white), not a
+   randomly generated one. Text stays a fixed dark colour throughout, which
+   stays comfortably readable against every one of the catalogue colours
+   because the mix is always mostly white. Two clashing blocks stack
+   (display: block, one per line) rather than overlap, so each keeps its
+   own tint fully visible — neither obscures the other. */
+@supports (background: color-mix(in srgb, red 10%, white)) {
+  .block {
+    background: color-mix(in srgb, var(--course-colour, #0b5fff) 22%, white);
+    border: 1px solid var(--course-colour, #0b5fff);
+    border-left-width: 4px;
+  }
 }
 
 .block:last-child {
