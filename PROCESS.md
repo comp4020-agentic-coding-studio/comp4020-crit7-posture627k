@@ -279,8 +279,13 @@ it on screen.
 
 ## Fourth iteration: fixed-fill UX correction and a larger timetable
 
-A production review after deployment surfaced two real usability problems in
-the deployed app, not new feature requests:
+A human review of the deployed app — not an automated test failure, and not a
+new feature request — surfaced two real usability problems: someone actually
+using the running production build found "Fill fixed activities" pressed and
+apparently did nothing, and separately judged the rendered timetable too
+small to read comfortably. Both are UX corrections to the existing contract,
+committed as
+[`c052273`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-posture627k/commit/c05227301195e382cf0e58f83a988a65d11125a7):
 
 **"Fill fixed activities" appeared to do nothing.** The root cause was in
 `src/pages/api/selection.ts`: adding a course already called the same
