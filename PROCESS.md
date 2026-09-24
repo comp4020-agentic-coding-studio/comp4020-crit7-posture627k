@@ -122,11 +122,20 @@ second tab's DOM.
 
 ## Second iteration: activity types and time choices
 
+The first iteration's course-level model — one flat list of sessions per
+course, present as soon as the course was selected — was insufficient for a
+real ANU-style timetable: a course's Lecture, Tutorial, and Lab aren't
+interchangeable, don't all have to be scheduled, don't all offer only one
+time, and aren't all mutually exclusive with each other. Modelling all of
+that as undifferentiated "sessions" would have made required-vs-optional,
+overlap policy, and multi-option choice impossible to express or enforce.
+
 Built on top of the deployed course-level planner above, without redesigning
 it: courses now expose one or more **activities** (Lecture/Tutorial/Lab/
 Drop-in), each required or optional, overlap-allowed or not, with one or
 more time options. No authentication, real ANU data, enrolment, or
-scheduling solver was introduced.
+scheduling solver was introduced. This work was committed as
+[`8d4620b`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-posture627k/commit/8d4620b6238241dc5976518164c02eca9f2eef5a).
 
 - `src/lib/catalogue.ts` was rewritten: each `DemoCourse`'s flat `sessions`
   list became `activities: ActivityGroup[]`, where a group carries `type`,
@@ -228,6 +237,45 @@ environment (Chrome cannot launch here — no working `libasound.so.2`, no
 sudo), so the two-tab claim was checked at this same protocol level rather
 than in an actual second tab; that limitation is unchanged from the
 original implementation.
+
+## Third iteration: colour-filled timetable blocks
+
+The activity-level iteration above gave each course a fixed catalogue
+colour, but only applied it as a border accent on each timetable block —
+deliberately, at the time, to sidestep computing per-colour contrast for an
+arbitrary background fill. On review this undersold the colour cue: a
+border strip is easy to miss, and the ask was for blocks to be visibly
+colour-coded so a course's activities read as one colour family at a
+glance, distinct from every other course's.
+
+`src/styles.css` was changed — no other file — so `.block` derives its
+background from the same `--course-colour` custom property already set on
+every block, via `color-mix(in srgb, var(--course-colour) 22%, white)`
+behind an `@supports` check, falling back to the previous neutral
+background in browsers without `color-mix()`. The mix ratio was chosen
+deterministically (not per-colour-tuned or randomly generated) and checked
+by hand against all six catalogue colours: mixing 22% of any of them into
+white stays pale enough that the block's existing fixed dark text colour
+(`#1a1a1a`) keeps strong contrast against every one, so no catalogue colour
+value needed to change. Clash cells were not touched: two clashing blocks
+already render as two separate stacked elements rather than one overlapping
+box, so each keeps its own tint fully visible next to the other, with the
+existing textual "Clash" label unchanged. This refinement was committed as
+[`66b20b5`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-posture627k/commit/66b20b5ec725ee3062527b30f67469614a8a3763).
+
+**Local verification**: `pnpm typecheck` — 0 errors; `pnpm test` — 47/47
+tests passing, none added or changed (this was a CSS-only change with no
+new externally visible contract to assert); `pnpm check` — green. Manually,
+against `pnpm dev`: fetched the rendered page and its bundled CSS directly
+and confirmed the `color-mix()` rule was present, that `DEMO1001` and
+`DEMO1002` (the catalogue's deliberate Monday 10:00–11:00 clash pair)
+rendered as two distinctly-coloured `.block` elements inside the same
+`td.clash` cell, each still carrying its own `--course-colour` and the
+`Clash` label still present as text. As with every other manual check in
+this document, no real browser could be driven in this environment (Chrome
+cannot launch here — no working `libasound.so.2`, no sudo), so this was
+verified at the rendered-markup/CSS-source level rather than by looking at
+it on screen.
 
 ## Before you ship
 
