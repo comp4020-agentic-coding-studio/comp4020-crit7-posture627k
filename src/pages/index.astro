@@ -199,41 +199,43 @@ function isClash(blocks: RenderedBlock[]): boolean {
         </section>
         <section aria-labelledby="timetable-heading" class="timetable">
           <h2 id="timetable-heading">Weekly timetable</h2>
-          <table id="timetable">
-            <thead>
-              <tr>
-                <th scope="col">Time</th>
-                {WEEKDAYS.map((day) => <th scope="col">{day}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {hours.map((hour) => (
+          <div class="timetable-scroll">
+            <table id="timetable">
+              <thead>
                 <tr>
-                  <th scope="row">{hourLabel(hour)}</th>
-                  {WEEKDAYS.map((day) => {
-                    const blocks = blocksAt(day, hour);
-                    const clash = isClash(blocks);
-                    return (
-                      <td class={clash ? "clash" : undefined}>
-                        {blocks.map((block) => (
-                          <span
-                            class="block"
-                            style={`--course-colour: ${block.course.colour}`}
-                            data-course-id={block.course.id}
-                            data-activity-group-id={block.group.id}
-                            data-option-id={block.option.id}
-                          >
-                            {block.course.id} / {block.group.type} / {block.option.start}–{block.option.end}
-                          </span>
-                        ))}
-                        {clash && <span class="clash-label">Clash</span>}
-                      </td>
-                    );
-                  })}
+                  <th scope="col">Time</th>
+                  {WEEKDAYS.map((day) => <th scope="col">{day}</th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {hours.map((hour) => (
+                  <tr>
+                    <th scope="row">{hourLabel(hour)}</th>
+                    {WEEKDAYS.map((day) => {
+                      const blocks = blocksAt(day, hour);
+                      const clash = isClash(blocks);
+                      return (
+                        <td class={clash ? "clash" : undefined}>
+                          {blocks.map((block) => (
+                            <span
+                              class="block"
+                              style={`--course-colour: ${block.course.colour}`}
+                              data-course-id={block.course.id}
+                              data-activity-group-id={block.group.id}
+                              data-option-id={block.option.id}
+                            >
+                              {block.course.id} / {block.group.type} / {block.option.start}–{block.option.end}
+                            </span>
+                          ))}
+                          {clash && <span class="clash-label">Clash</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
     </main>
@@ -277,6 +279,12 @@ function isClash(blocks: RenderedBlock[]): boolean {
               body: new URLSearchParams({ action: "fill-fixed" }),
             });
             if (!response.ok) throw new Error(await response.text());
+            const result = (await response.json()) as { filledCount: number };
+            report(
+              result.filledCount > 0
+                ? `Filled ${result.filledCount} fixed ${result.filledCount === 1 ? "activity" : "activities"}.`
+                : "All fixed activities are already filled.",
+            );
             await refreshFromServer();
           } catch {
             report("Could not fill fixed activities. Please try again.");

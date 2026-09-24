@@ -277,6 +277,60 @@ cannot launch here — no working `libasound.so.2`, no sudo), so this was
 verified at the rendered-markup/CSS-source level rather than by looking at
 it on screen.
 
+## Fourth iteration: fixed-fill UX correction and a larger timetable
+
+A production review after deployment surfaced two real usability problems in
+the deployed app, not new feature requests:
+
+**"Fill fixed activities" appeared to do nothing.** The root cause was in
+`src/pages/api/selection.ts`: adding a course already called the same
+single-option-required auto-fill logic the button was meant to trigger, in
+the same request. So by the time a user pressed "Fill fixed activities",
+every fixed activity for their selected courses had usually already been
+persisted silently, and the button had nothing left to do — it was
+technically implemented correctly, but the production UI made it look
+broken. The fix removes that auto-fill from course add entirely: adding a
+course now only ever selects the course. Persisting a single-option required
+activity is exclusively `POST /api/activity-selection` with `action:
+"fill-fixed"`, invoked only by that button, as its own explicit step. That
+route now also distinguishes activities it actually just persisted from ones
+already holding the right value, and returns a `filledCount` the client
+displays through the existing `#selection-status` `aria-live="polite"`
+region — "Filled N fixed activities." or "All fixed activities are already
+filled." — so the action always gives visible, truthful feedback instead of
+silently succeeding or silently doing nothing. A selected course with an
+unfilled fixed activity now visibly says so in the catalogue ("Not yet in
+timetable"), which was already present markup but previously unreachable in
+practice since add had already filled the row underneath it.
+
+**The timetable was visually too small.** `main`'s max-width and `.planner`'s
+equal 1fr/1fr column split meant the timetable — the page's primary artefact
+— shared the page evenly with the catalogue and was capped well below a
+normal desktop viewport's width. `src/styles.css` now gives the timetable
+column roughly 70% of the planner's width against the catalogue's 30%
+(`minmax(18rem, 3fr) minmax(0, 7fr)`), raises `main`'s max-width so that
+split has real room to work with, and increases the timetable's own
+cell padding, row height, block padding, and font size so a course id,
+activity type, and time read clearly at a glance. The table sits in its own
+horizontally-scrollable wrapper with a minimum width, so on a viewport too
+narrow for all five weekday columns at a readable size, the timetable
+scrolls as its own region instead of shrinking every column until the text
+is illegible; below a stacking breakpoint the catalogue and timetable stack
+vertically instead, as before. None of the existing colour-fill or clash
+styling from the previous iteration was touched.
+
+Both corrections were verified against the existing test suite and two new
+`spec/timetable.test.ts` cases protecting the corrected contract: that
+selecting a course alone never persists its fixed activity, that "Fill fixed
+activities" is idempotent and reports zero remaining work on a second call,
+and that an optional single-option activity is never swept up by the fill
+even though it technically has only one option. As with every prior
+iteration, no real browser could be driven in this environment (Chrome
+cannot launch here — no working `libasound.so.2`, no sudo), so the layout
+change was verified at the rendered-HTML/CSS level, not by looking at it on
+screen; a human visual check in a real browser is still required to confirm
+how the enlarged timetable actually reads.
+
 ## Before you ship
 
 `reflections/crit-7.md` still does not exist. This is intentional, not an

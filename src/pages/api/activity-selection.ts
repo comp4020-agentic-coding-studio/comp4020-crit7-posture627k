@@ -7,6 +7,7 @@ import {
 } from "../../lib/catalogue";
 import {
   clearActivityOption,
+  listSelectedActivityOptions,
   listSelectedCourseIds,
   setActivityOption,
   setActivityOptions,
@@ -28,19 +29,25 @@ export const POST: APIRoute = async ({ request }) => {
   if (action === "fill-fixed") {
     // Entirely server-computed from the catalogue and the current
     // selection — the client supplies no identifiers here, so there is
-    // nothing for it to forge its way into.
+    // nothing for it to forge its way into. Only groups that aren't already
+    // filled with their single valid option count as newly filled, so the
+    // response can honestly report "nothing to do" on a second call instead
+    // of silently re-writing rows that already hold the right value.
+    const currentOptions = listSelectedActivityOptions();
     const targets = singleOptionRequiredGroups(listSelectedCourseIds());
-    const selections = targets.map(({ courseId, group }) => ({
-      courseId,
-      activityGroupId: group.id,
-      optionId: group.options[0].id,
-    }));
-    setActivityOptions(selections);
+    const selections = targets
+      .filter(({ group }) => currentOptions[group.id] !== group.options[0].id)
+      .map(({ courseId, group }) => ({
+        courseId,
+        activityGroupId: group.id,
+        optionId: group.options[0].id,
+      }));
+    if (selections.length > 0) setActivityOptions(selections);
     for (const selection of selections) {
       const change: SelectionChangeEvent = { kind: "activity", ...selection };
       bus.emit("selection", change);
     }
-    return new Response(JSON.stringify({ filled: selections }), {
+    return new Response(JSON.stringify({ filled: selections, filledCount: selections.length }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });

@@ -23,13 +23,17 @@ Lecture, Tutorial, Lab, or Drop-in), and each activity is either:
 - **optional** — doesn't have to be scheduled at all.
 
 An activity may offer more than one time. If it offers only one, there's
-nothing meaningful to choose, so it's included in your timetable as soon as
-its course is selected (or by the "Fill fixed activities" button, for a
-required activity that isn't yet included). If it offers several, you pick
-one from an accessible set of choices next to the course in the catalogue —
-only the option you pick appears on the timetable, and picking a different
-one swaps it out immediately. Every choice is saved through the server into
-SQLite, so it survives a reload exactly like the course selection itself.
+nothing meaningful to choose between, but selecting its course does not put
+it on your timetable by itself — it's marked in the catalogue as a fixed
+activity that isn't yet included, and stays that way until you press "Fill
+fixed activities". That button persists every such activity, for every
+course you've selected, in one action, and tells you how many it just
+filled (or that there was nothing left to fill). If an activity offers
+several times, you pick one from an accessible set of choices next to the
+course in the catalogue instead — only the option you pick appears on the
+timetable, and picking a different one swaps it out immediately. Every
+choice, fixed or chosen, is saved through the server into SQLite, so it
+survives a reload exactly like the course selection itself.
 
 Each course keeps one fixed colour, defined in the catalogue rather than
 generated in the browser, so it looks the same after every reload; every
@@ -59,9 +63,10 @@ by using the app.
 - The timetable renders only activity options that are actually selected —
   never a block for an unselected course, an un-chosen multi-option
   activity, or an unselected optional activity.
-- A required activity with only one time option can be filled in one click
-  ("Fill fixed activities"), and that action never chooses between options
-  for a multi-option activity.
+- A required activity with only one time option is never added to the
+  timetable merely by selecting its course — it is filled in one click via
+  "Fill fixed activities", which reports how many activities it just filled
+  and never chooses between options for a multi-option activity.
 - The page meets the same accessibility/structural floor as every page in
   this app: one top-level heading, a navigation landmark, a declared
   language, a real title, a mobile viewport, alt text on every image, and

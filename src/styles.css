@@ -7,7 +7,7 @@ body {
 }
 
 main {
-  max-width: 60rem;
+  max-width: 88rem;
   margin: 0 auto;
 }
 
@@ -27,12 +27,15 @@ button {
 
 .planner {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* The timetable is the page's primary artefact — the catalogue only
+     needs enough width to stay readable, so the timetable column gets most
+     of the horizontal space on a normal desktop viewport (roughly 30/70). */
+  grid-template-columns: minmax(18rem, 3fr) minmax(0, 7fr);
   gap: 2rem;
   align-items: start;
 }
 
-@media (max-width: 45rem) {
+@media (max-width: 60rem) {
   .planner {
     grid-template-columns: 1fr;
   }
@@ -154,18 +157,30 @@ button {
   flex-basis: 100%;
 }
 
+/* Lets the timetable scroll horizontally as its own region on a viewport too
+   narrow to show every weekday column at a readable width, instead of the
+   table shrinking its columns until the content becomes illegible. */
+.timetable-scroll {
+  overflow-x: auto;
+}
+
 #timetable {
   width: 100%;
+  min-width: 48rem;
   border-collapse: collapse;
-  font-size: 0.85em;
+  font-size: 1em;
 }
 
 #timetable th,
 #timetable td {
   border: 1px solid #ddd;
-  padding: 0.3rem;
+  padding: 0.6rem 0.6rem;
   text-align: left;
   vertical-align: top;
+}
+
+#timetable td {
+  min-width: 8rem;
 }
 
 #timetable th[scope="row"] {
@@ -186,9 +201,10 @@ button {
   color: #1a1a1a;
   border: 1px solid #ccc;
   border-left: 4px solid var(--course-colour, #0b5fff);
-  border-radius: 0.2rem;
-  padding: 0.15rem 0.3rem;
-  margin-bottom: 0.2rem;
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  line-height: 1.4;
+  margin-bottom: 0.35rem;
 }
 
 /* Tints each block with its own course's stable catalogue colour — a fixed,

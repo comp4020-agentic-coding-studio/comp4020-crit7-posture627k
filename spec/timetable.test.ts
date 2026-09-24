@@ -6,9 +6,12 @@ import { DEMO_CATALOGUE, findDemoCourse } from "../src/lib/catalogue";
 // server against a throwaway SQLite file) to prove the timetable planner's
 // contract holds in THIS repo: a demo course can be added and removed
 // through the real /api/selection endpoint, the change is visible in the
-// server-rendered timetable on a fresh page load (SQLite, not the response
+// server-rendered catalogue on a fresh page load (SQLite, not the response
 // body, is what's being checked), and other open tabs would hear about it
-// over the same SSE stream the guestbook starter used.
+// over the same SSE stream the guestbook starter used. Adding a course only
+// selects it — it does not by itself persist any activity option, so these
+// course-level tests check the catalogue's own selected state rather than a
+// timetable block; the activity-choices tests below cover blocks.
 const baseUrl = inject("baseUrl");
 const courseId = DEMO_CATALOGUE[0].id;
 
@@ -31,12 +34,7 @@ const getIndexDocument = async (): Promise<Document> => {
 
 function isRenderedAsSelected(doc: Document, id: string): boolean {
   const button = doc.querySelector(`button[data-course-id="${id}"]`);
-  const block = doc.querySelector(`.block[data-course-id="${id}"]`);
-  return (
-    button?.getAttribute("aria-pressed") === "true" &&
-    block !== null &&
-    !block.hasAttribute("hidden")
-  );
+  return button?.getAttribute("aria-pressed") === "true" && button.textContent?.trim() === "Remove";
 }
 
 describe("timetable", () => {
@@ -149,22 +147,69 @@ describe("activity choices", () => {
     expect(blocksFor(doc, "DEMO1003")).toHaveLength(0);
   });
 
-  // (2) selecting a course changes the rendered timetable appropriately
-  it("selecting a course renders its fixed (single-option required) activity", async () => {
+  // (2) selecting a course does NOT auto-persist its fixed (single-option
+  // required) activity — only "Fill fixed activities" does that, as its own
+  // explicit user action. Also covers: a fresh GET / before the fill shows
+  // nothing, fill-fixed persists the activity, a fresh GET / after the fill
+  // shows it, and fill-fixed reports a meaningful newly-filled count.
+  it("selecting a course leaves its fixed activity unfilled until Fill fixed activities is invoked", async () => {
     await select("DEMO1003", "add");
-    const doc = await getIndexDocument();
-    const blocks = blocksFor(doc, "DEMO1003");
+    const beforeFill = await getIndexDocument();
+    expect(blocksFor(beforeFill, "DEMO1003")).toHaveLength(0);
+
+    const fillRes = await fillFixed();
+    expect(fillRes.status).toBe(200);
+    expect((await fillRes.json()).filledCount).toBe(1);
+
+    const afterFill = await getIndexDocument();
+    const blocks = blocksFor(afterFill, "DEMO1003");
     expect(blocks).toHaveLength(1);
     expect(blocks[0].getAttribute("data-activity-group-id")).toBe("DEMO1003:LEC");
+
     await select("DEMO1003", "remove"); // leave the shared test DB clean
   });
 
-  // (3) removing a course removes all of its timetable activities
+  // (2b) a second Fill fixed activities call is idempotent: nothing left to
+  // fill, no duplicate row, and the response says so.
+  it('"Fill fixed activities" is idempotent once everything is already filled', async () => {
+    await select("DEMO1003", "add");
+    await fillFixed();
+
+    const secondRes = await fillFixed();
+    expect(secondRes.status).toBe(200);
+    expect((await secondRes.json()).filledCount).toBe(0);
+
+    const doc = await getIndexDocument();
+    expect(blocksFor(doc, "DEMO1003")).toHaveLength(1);
+
+    await select("DEMO1003", "remove"); // leave the shared test DB clean
+  });
+
+  // (2c) an optional activity is never auto-filled, even when it has only
+  // one option — "fixed" only ever applies to required activities.
+  it('"Fill fixed activities" never fills an optional activity, even with a single option', async () => {
+    await select("DEMO1004", "add"); // DEMO1004:DRP is optional with exactly one option
+    await fillFixed();
+
+    const doc = await getIndexDocument();
+    expect(doc.querySelector('.block[data-activity-group-id="DEMO1004:DRP"]')).toBeNull();
+    expect(doc.querySelector('.block[data-activity-group-id="DEMO1004:LEC"]')).not.toBeNull();
+
+    await select("DEMO1004", "remove"); // leave the shared test DB clean
+  });
+
+  // (3) removing a course removes all of its timetable activities, including
+  // both a manually-chosen multi-option activity and one persisted only via
+  // "Fill fixed activities" — removal must cascade over both origins.
   it("removing a course removes every one of its timetable activities", async () => {
     await select("DEMO1003", "add");
     await setOption("DEMO1003", "DEMO1003:LAB", "DEMO1003:LAB:1");
+    await fillFixed(); // persists DEMO1003:LEC
     const before = await getIndexDocument();
-    expect(blocksFor(before, "DEMO1003").length).toBeGreaterThan(0);
+    const groupsBefore = new Set(
+      blocksFor(before, "DEMO1003").map((b) => b.getAttribute("data-activity-group-id")),
+    );
+    expect(groupsBefore).toEqual(new Set(["DEMO1003:LEC", "DEMO1003:LAB"]));
 
     await select("DEMO1003", "remove");
     const after = await getIndexDocument();
@@ -187,7 +232,7 @@ describe("activity choices", () => {
 
   // (6) choosing one option renders that option and not the alternatives
   it("choosing one option out of several renders only that option", async () => {
-    await select("DEMO1001", "add"); // auto-fills DEMO1001:LEC only
+    await select("DEMO1001", "add");
     await setOption("DEMO1001", "DEMO1001:TUT", "DEMO1001:TUT:1");
 
     const doc = await getIndexDocument();
@@ -227,9 +272,11 @@ describe("activity choices", () => {
     await select("DEMO1001", "remove"); // leave the shared test DB clean
   });
 
-  // (9) fixed/single-option required activities can be auto-filled
+  // (9) fixed/single-option required activities can be filled, including
+  // after being explicitly cleared
   it('"Fill fixed activities" restores a cleared single-option required activity', async () => {
     await select("DEMO1006", "add"); // both DEMO1006 activities are single-option required
+    await fillFixed();
     await clearOption("DEMO1006", "DEMO1006:LEC");
 
     const cleared = await getIndexDocument();
