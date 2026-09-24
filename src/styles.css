@@ -38,6 +38,19 @@ button {
   }
 }
 
+.catalogue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.catalogue-actions .hint {
+  color: #555;
+  font-size: 0.85em;
+}
+
 #catalogue-list {
   list-style: none;
   padding: 0;
@@ -46,14 +59,30 @@ button {
   gap: 0.75rem;
 }
 
-#catalogue-list li {
+.course {
+  padding: 0.5rem 0 0.75rem;
+  border-bottom: 1px solid #ddd;
+  border-left: 4px solid var(--course-colour, #ccc);
+  padding-left: 0.5rem;
+}
+
+.course-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #ddd;
+}
+
+.colour-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--course-colour, #ccc);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  margin-right: 0.35rem;
+  vertical-align: middle;
 }
 
 .course-name {
@@ -65,16 +94,64 @@ button {
   color: #555;
 }
 
-.course-sessions {
-  color: #555;
-  font-size: 0.9em;
-  flex-basis: 100%;
-}
-
 #catalogue-list button[aria-pressed="true"] {
   background: #0b5fff;
   color: #fff;
   border-color: #0b5fff;
+}
+
+.activity-groups {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.activity-group {
+  border: 1px solid #ddd;
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.9em;
+}
+
+.activity-group legend {
+  font-weight: 600;
+  padding: 0;
+}
+
+.activity-tag {
+  font-weight: 400;
+  color: #555;
+  font-size: 0.85em;
+}
+
+.activity-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  font-weight: 400;
+}
+
+.activity-fixed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.activity-label {
+  font-weight: 600;
+}
+
+.activity-time {
+  color: #333;
+}
+
+.activity-fill-status {
+  color: #555;
+  font-size: 0.85em;
+  flex-basis: 100%;
 }
 
 #timetable {
@@ -97,10 +174,27 @@ button {
   color: #555;
 }
 
+#timetable td.clash {
+  background: #fff4f4;
+}
+
 .block {
   display: block;
-  background: #e6efff;
-  border: 1px solid #0b5fff;
+  background: #f8f9fb;
+  border: 1px solid #ccc;
+  border-left: 4px solid var(--course-colour, #0b5fff);
   border-radius: 0.2rem;
   padding: 0.15rem 0.3rem;
+  margin-bottom: 0.2rem;
+}
+
+.block:last-child {
+  margin-bottom: 0;
+}
+
+.clash-label {
+  display: block;
+  font-weight: 600;
+  color: #b00020;
+  font-size: 0.75em;
 }

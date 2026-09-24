@@ -18,6 +18,17 @@ agent should behave while building toward it.
 - Use controlled demo course/activity data. Do not wire in a live ANU API,
   scraped MyTimetable data, or real enrolment information unless a verified
   source is deliberately introduced later as its own explicit decision.
+- Activity types, required/optional status, overlap policy, and every time
+  option live in the catalogue (`src/lib/catalogue.ts`), never duplicated
+  into SQLite. Never trust a client-supplied activity/option identifier —
+  validate it against the catalogue before writing anything.
+- The timetable renders only activity options that are actually selected in
+  SQLite — never a block for an unselected course, an un-chosen multi-option
+  activity, or an unselected optional activity. Do not add a scheduling
+  solver or auto-resolve clashes; visualise a clash, don't hide or block it.
+- Each demo course keeps one fixed colour defined in the catalogue, not
+  generated client-side. Colour is always paired with a text label — never
+  the only way selection or activity state is communicated.
 
 ## Persistence rules
 

@@ -15,6 +15,13 @@
       "when": 1790246930413,
       "tag": "0001_careless_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790253309659,
+      "tag": "0002_parched_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

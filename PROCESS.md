@@ -120,6 +120,115 @@ instead: with one `GET /api/events` connection left open, a `POST
 the exact event the page's `EventSource` handler consumes to update a
 second tab's DOM.
 
+## Second iteration: activity types and time choices
+
+Built on top of the deployed course-level planner above, without redesigning
+it: courses now expose one or more **activities** (Lecture/Tutorial/Lab/
+Drop-in), each required or optional, overlap-allowed or not, with one or
+more time options. No authentication, real ANU data, enrolment, or
+scheduling solver was introduced.
+
+- `src/lib/catalogue.ts` was rewritten: each `DemoCourse`'s flat `sessions`
+  list became `activities: ActivityGroup[]`, where a group carries `type`,
+  `required`, `overlapAllowed`, and one or more `options` (day/start/end).
+  Every course also gained a fixed `colour`. `DEMO1001`–`DEMO1006` kept
+  their identifiers; their activities were redesigned so the catalogue
+  demonstrates every required case: a single-fixed Lecture, several
+  Tutorial choices, several Lab choices, a Drop-in, an optional activity, an
+  overlap-allowed activity, and a deliberate Lecture-time clash between
+  `DEMO1001` and `DEMO1002`.
+- `src/lib/schema.ts` gained a second table, `selected_activity_options`
+  (`activity_group_id` primary key, `course_id`, `option_id`) alongside the
+  existing `selected_courses` — the smallest addition that lets SQLite
+  record which time option is chosen per activity group, without
+  duplicating any catalogue data. `pnpm db:generate` produced
+  `drizzle/0002_parched_rocket_racer.sql` (its own auto-generated name, not
+  invented); the two prior migrations were not touched. `src/lib/db.ts`
+  gained `listSelectedActivityOptions`, `setActivityOption`,
+  `clearActivityOption`, and a transactional bulk `setActivityOptions`;
+  `deselectCourse` now deletes a removed course's activity-option rows in
+  the same transaction as the course row, so removing a course leaves no
+  trace of its timetable.
+- `POST /api/selection`'s response body is unchanged
+  (`{courseId, selected}`), so existing callers keep working. On `action=add`
+  it now also writes, in the same request, every required activity that has
+  exactly one time option for that course — there's nothing meaningful to
+  choose, so the activity is part of the timetable as soon as the course is.
+  A new route, `src/pages/api/activity-selection.ts`, handles `set`, `clear`,
+  and `fill-fixed` for per-activity time choices: every `courseId`,
+  `activityGroupId`, and `optionId` is checked against the catalogue (and
+  that the course is currently selected) before anything is written;
+  `fill-fixed` takes no client-supplied identifiers, so there is nothing for
+  a client to forge into it, and it only ever fills a *required* activity
+  with exactly one option — never a multi-option one.
+- `src/lib/events.ts`'s `SelectionChangeEvent` became a discriminated union
+  (`{kind:"course",...} | {kind:"activity",...}`) so activity-option changes
+  travel over the same existing SSE channel and bus as course-level changes,
+  rather than a second ad-hoc event format. `src/pages/api/events.ts` itself
+  was not changed.
+- `src/pages/index.astro` was rewritten to render each selected course's
+  activity groups: a static line for a fixed (single-option, required)
+  activity, and an accessible radio-button `fieldset` for anything else — a
+  multi-option activity, or an optional activity of any option count, gets
+  a "None" radio alongside its time choices. The timetable renders a block
+  only for an activity option actually present in SQLite — never for an
+  unselected course, an un-chosen multi-option activity, or an unselected
+  optional one. Every block carries its course's fixed colour as a CSS
+  custom property on a border accent (not a filled background, so text
+  contrast never depends on which colour a course happens to have) and a
+  text label (`DEMO1001 / Lecture / 10:00–11:00`) — colour is never the only
+  cue. A slot holding more than one block where not everything present is
+  overlap-allowed is marked "Clash" in text, rather than hiding either
+  block. A "Fill fixed activities" button calls the bulk-fill action for a
+  course that was already selected before one of its fixed activities got
+  cleared or existed before this feature. The client script re-renders by
+  re-fetching this same server-rendered page and swapping in the fresh
+  `#catalogue-list`/`#timetable` markup, rather than duplicating clash
+  detection, colouring, or labelling logic in JavaScript — so the DOM can
+  never drift from what the server actually persisted.
+- `spec/timetable.test.ts` gained a second `describe` block, "activity
+  choices", with 13 new tests: no blocks for an unselected course; a fixed
+  activity appearing on course selection; full removal of a course's
+  activities on removal; all four activity types present in the catalogue;
+  multi-option activities existing; choosing one option rendering only that
+  option; switching an option swapping the rendered block; a chosen option
+  surviving independent requests; "Fill fixed activities" restoring a
+  cleared fixed activity; that same action never choosing among a
+  multi-option activity; stable distinct course colours across requests;
+  server-side rejection of invalid course/activity/option combinations; and
+  an activity-kind SSE event. All 9 pre-existing `timetable` tests, and all
+  of `spec/invariants.test.ts` and `spec/readme.test.ts`, were left
+  untouched.
+- `README.md` gained an "Activities and time choices" section plus two new
+  mechanically-enforced bullets; `CLAUDE.md` gained three product rules
+  pinning the catalogue as the authority for activity data, render-only-
+  actual-selections, and the colour/text-label rule, for this extended
+  model.
+
+**Local verification** (before committing): `pnpm typecheck` — 0 errors;
+`pnpm test` — 47/47 tests passing across 4 files; `pnpm check` — green.
+Manually, against `pnpm dev` (a throwaway local database, cleaned up
+afterward): with nothing selected, no course rendered any timetable block;
+selecting `DEMO1005` (both activities single-option required) rendered both
+its Lecture and Tutorial immediately; selecting `DEMO1001` (multi-option
+Tutorial) rendered only its fixed Lecture — its Tutorial stayed unrendered
+until an option was chosen, choosing one rendered exactly that option, and
+switching to a different option removed the first block and rendered the
+new one; removing `DEMO1001` removed every one of its blocks; selecting
+`DEMO1002`, `DEMO1003`, and `DEMO1005` together showed three distinct,
+stable colours; clearing `DEMO1003`'s fixed Lecture and then calling "Fill
+fixed activities" restored exactly that block while leaving `DEMO1002`'s
+optional multi-option Drop-in untouched; two independent `GET /` requests
+returned identical selected courses and activity options; and, with one
+`GET /api/events` connection held open, a `POST /api/activity-selection`
+produced a `data: {"kind":"activity",...}` line on that connection — the
+same protocol-level check used for the course-level SSE contract earlier in
+this document. As before, no real browser could be driven in this
+environment (Chrome cannot launch here — no working `libasound.so.2`, no
+sudo), so the two-tab claim was checked at this same protocol level rather
+than in an actual second tab; that limitation is unchanged from the
+original implementation.
+
 ## Before you ship
 
 `reflections/crit-7.md` still does not exist. This is intentional, not an

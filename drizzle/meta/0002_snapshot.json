@@ -1,0 +1,66 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "7c39ccff-caca-411e-ae61-79ba949c6077",
+  "prevId": "5448d27b-1867-45d3-951a-ed0e5b4ec104",
+  "tables": {
+    "selected_activity_options": {
+      "name": "selected_activity_options",
+      "columns": {
+        "activity_group_id": {
+          "name": "activity_group_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "option_id": {
+          "name": "option_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "selected_courses": {
+      "name": "selected_courses",
+      "columns": {
+        "course_id": {
+          "name": "course_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

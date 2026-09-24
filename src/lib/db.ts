@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { selectedCourses } from "./schema";
+import { selectedActivityOptions, selectedCourses } from "./schema";
 
 // One SQLite file is the app's whole persistent state. In production
 // fly.toml points DATABASE_PATH at the machine's volume (/data), which is
@@ -41,7 +41,53 @@ export function selectCourse(courseId: string): void {
   db.insert(selectedCourses).values({ courseId }).onConflictDoNothing().run();
 }
 
-// Idempotent: removing a course that isn't selected is a no-op delete.
+// Idempotent: removing a course that isn't selected is a no-op delete. Also
+// clears any activity-option selections that belonged to it — a removed
+// course must leave no timetable trace behind.
 export function deselectCourse(courseId: string): void {
-  db.delete(selectedCourses).where(eq(selectedCourses.courseId, courseId)).run();
+  db.transaction((tx) => {
+    tx.delete(selectedActivityOptions).where(eq(selectedActivityOptions.courseId, courseId)).run();
+    tx.delete(selectedCourses).where(eq(selectedCourses.courseId, courseId)).run();
+  });
+}
+
+// activityGroupId -> the option id currently chosen for it. An activity
+// group absent from this map has no option selected.
+export function listSelectedActivityOptions(): Record<string, string> {
+  return Object.fromEntries(
+    db
+      .select()
+      .from(selectedActivityOptions)
+      .all()
+      .map((row) => [row.activityGroupId, row.optionId]),
+  );
+}
+
+// Sets (or replaces) the chosen option for one activity group.
+export function setActivityOption(courseId: string, activityGroupId: string, optionId: string): void {
+  db.insert(selectedActivityOptions)
+    .values({ activityGroupId, courseId, optionId })
+    .onConflictDoUpdate({ target: selectedActivityOptions.activityGroupId, set: { optionId } })
+    .run();
+}
+
+// Clears the chosen option for one activity group (e.g. unchecking an
+// optional activity). A no-op if it had no option selected.
+export function clearActivityOption(activityGroupId: string): void {
+  db.delete(selectedActivityOptions).where(eq(selectedActivityOptions.activityGroupId, activityGroupId)).run();
+}
+
+// Bulk version of setActivityOption for "Fill fixed activities": applies
+// every given selection in one transaction so the fill is all-or-nothing.
+export function setActivityOptions(
+  selections: { courseId: string; activityGroupId: string; optionId: string }[],
+): void {
+  db.transaction((tx) => {
+    for (const { courseId, activityGroupId, optionId } of selections) {
+      tx.insert(selectedActivityOptions)
+        .values({ activityGroupId, courseId, optionId })
+        .onConflictDoUpdate({ target: selectedActivityOptions.activityGroupId, set: { optionId } })
+        .run();
+    }
+  });
 }

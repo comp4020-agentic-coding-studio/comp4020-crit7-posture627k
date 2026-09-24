@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, inject, it } from "vitest";
-import { DEMO_CATALOGUE } from "../src/lib/catalogue";
+import { DEMO_CATALOGUE, findDemoCourse } from "../src/lib/catalogue";
 
 // Drives the running app over HTTP (spec/global-setup.ts boots the built
 // server against a throwaway SQLite file) to prove the timetable planner's
@@ -114,5 +114,208 @@ describe("timetable", () => {
     expect(received).toContain(`"selected":true`);
 
     await select(courseId, "remove"); // leave the shared test DB clean
+  }, 10_000);
+});
+
+// Second iteration: activity types (Lecture/Tutorial/Lab/Drop-in), required
+// vs optional, overlap policy, and per-activity time choices — added on top
+// of the course-level contract above, through the same same-page workflow.
+// A course id is picked per scenario below to avoid colliding with the
+// course-level tests above, which run in this same file against the same
+// shared test database.
+const postActivitySelection = (body: URLSearchParams) =>
+  fetch(new URL("/api/activity-selection", baseUrl), {
+    method: "POST",
+    headers: { origin: baseUrl },
+    body,
+  });
+
+const setOption = (courseId: string, activityGroupId: string, optionId: string) =>
+  postActivitySelection(new URLSearchParams({ action: "set", courseId, activityGroupId, optionId }));
+
+const clearOption = (courseId: string, activityGroupId: string) =>
+  postActivitySelection(new URLSearchParams({ action: "clear", courseId, activityGroupId }));
+
+const fillFixed = () => postActivitySelection(new URLSearchParams({ action: "fill-fixed" }));
+
+function blocksFor(doc: Document, courseId: string): Element[] {
+  return Array.from(doc.querySelectorAll(`.block[data-course-id="${courseId}"]`));
+}
+
+describe("activity choices", () => {
+  // (1) an unselected course produces no timetable activity blocks
+  it("an unselected course renders no timetable activity blocks", async () => {
+    const doc = await getIndexDocument();
+    expect(blocksFor(doc, "DEMO1003")).toHaveLength(0);
+  });
+
+  // (2) selecting a course changes the rendered timetable appropriately
+  it("selecting a course renders its fixed (single-option required) activity", async () => {
+    await select("DEMO1003", "add");
+    const doc = await getIndexDocument();
+    const blocks = blocksFor(doc, "DEMO1003");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].getAttribute("data-activity-group-id")).toBe("DEMO1003:LEC");
+    await select("DEMO1003", "remove"); // leave the shared test DB clean
+  });
+
+  // (3) removing a course removes all of its timetable activities
+  it("removing a course removes every one of its timetable activities", async () => {
+    await select("DEMO1003", "add");
+    await setOption("DEMO1003", "DEMO1003:LAB", "DEMO1003:LAB:1");
+    const before = await getIndexDocument();
+    expect(blocksFor(before, "DEMO1003").length).toBeGreaterThan(0);
+
+    await select("DEMO1003", "remove");
+    const after = await getIndexDocument();
+    expect(blocksFor(after, "DEMO1003")).toHaveLength(0);
+  });
+
+  // (4) a course can expose Lecture/Tutorial/Lab/Drop-in activity types
+  it("the catalogue covers all four activity types", () => {
+    const types = new Set(DEMO_CATALOGUE.flatMap((course) => course.activities.map((group) => group.type)));
+    expect(types).toEqual(new Set(["Lecture", "Tutorial", "Lab", "Drop-in"]));
+  });
+
+  // (5) one activity may have multiple valid time options
+  it("some activity groups offer more than one time option", () => {
+    const multiOption = DEMO_CATALOGUE.flatMap((course) => course.activities).filter(
+      (group) => group.options.length > 1,
+    );
+    expect(multiOption.length).toBeGreaterThan(0);
+  });
+
+  // (6) choosing one option renders that option and not the alternatives
+  it("choosing one option out of several renders only that option", async () => {
+    await select("DEMO1001", "add"); // auto-fills DEMO1001:LEC only
+    await setOption("DEMO1001", "DEMO1001:TUT", "DEMO1001:TUT:1");
+
+    const doc = await getIndexDocument();
+    const tutBlocks = doc.querySelectorAll('.block[data-activity-group-id="DEMO1001:TUT"]');
+    expect(tutBlocks).toHaveLength(1);
+    expect(tutBlocks[0].getAttribute("data-option-id")).toBe("DEMO1001:TUT:1");
+
+    await select("DEMO1001", "remove"); // leave the shared test DB clean
+  });
+
+  // (7) changing the option removes the previous block and renders the new one
+  it("changing the chosen option swaps the rendered block", async () => {
+    await select("DEMO1001", "add");
+    await setOption("DEMO1001", "DEMO1001:TUT", "DEMO1001:TUT:1");
+    await setOption("DEMO1001", "DEMO1001:TUT", "DEMO1001:TUT:2");
+
+    const doc = await getIndexDocument();
+    const tutBlocks = doc.querySelectorAll('.block[data-activity-group-id="DEMO1001:TUT"]');
+    expect(tutBlocks).toHaveLength(1);
+    expect(tutBlocks[0].getAttribute("data-option-id")).toBe("DEMO1001:TUT:2");
+
+    await select("DEMO1001", "remove"); // leave the shared test DB clean
+  });
+
+  // (8) a selected activity option survives a fresh page request/reload
+  it("a chosen activity option survives independent requests", async () => {
+    await select("DEMO1001", "add");
+    await setOption("DEMO1001", "DEMO1001:TUT", "DEMO1001:TUT:3");
+
+    const first = await getIndexDocument();
+    const second = await getIndexDocument();
+    for (const doc of [first, second]) {
+      const tutBlock = doc.querySelector('.block[data-activity-group-id="DEMO1001:TUT"]');
+      expect(tutBlock?.getAttribute("data-option-id")).toBe("DEMO1001:TUT:3");
+    }
+
+    await select("DEMO1001", "remove"); // leave the shared test DB clean
+  });
+
+  // (9) fixed/single-option required activities can be auto-filled
+  it('"Fill fixed activities" restores a cleared single-option required activity', async () => {
+    await select("DEMO1006", "add"); // both DEMO1006 activities are single-option required
+    await clearOption("DEMO1006", "DEMO1006:LEC");
+
+    const cleared = await getIndexDocument();
+    expect(blocksFor(cleared, "DEMO1006").some((b) => b.getAttribute("data-activity-group-id") === "DEMO1006:LEC")).toBe(
+      false,
+    );
+
+    const fillRes = await fillFixed();
+    expect(fillRes.status).toBe(200);
+
+    const refilled = await getIndexDocument();
+    expect(
+      blocksFor(refilled, "DEMO1006").some((b) => b.getAttribute("data-activity-group-id") === "DEMO1006:LEC"),
+    ).toBe(true);
+
+    await select("DEMO1006", "remove"); // leave the shared test DB clean
+  });
+
+  // (10) the auto-fill action never chooses between multi-option activities
+  it('"Fill fixed activities" never chooses among a multi-option activity', async () => {
+    await select("DEMO1001", "add"); // DEMO1001:TUT has 3 options, none chosen
+    await fillFixed();
+
+    const doc = await getIndexDocument();
+    expect(doc.querySelector('.block[data-activity-group-id="DEMO1001:TUT"]')).toBeNull();
+
+    await select("DEMO1001", "remove"); // leave the shared test DB clean
+  });
+
+  // (11) different courses carry stable, distinct colours
+  it("courses carry stable, distinct colours across requests", async () => {
+    const colours = new Set(DEMO_CATALOGUE.map((course) => course.colour));
+    expect(colours.size).toBe(DEMO_CATALOGUE.length);
+
+    await select("DEMO1001", "add");
+    const first = await getIndexDocument();
+    const second = await getIndexDocument();
+    for (const doc of [first, second]) {
+      const item = doc.querySelector('.course[data-course-id="DEMO1001"]');
+      expect(item?.getAttribute("style")).toContain(findDemoCourse("DEMO1001")!.colour);
+    }
+    await select("DEMO1001", "remove"); // leave the shared test DB clean
+  });
+
+  // (12) invalid activity/course/option combinations are rejected server-side
+  it("rejects invalid activity-selection combinations", async () => {
+    expect((await postActivitySelection(new URLSearchParams({ action: "set", courseId: "DEMO9999", activityGroupId: "x", optionId: "y" }))).status).toBe(400);
+
+    expect(
+      (await postActivitySelection(new URLSearchParams({ action: "set", courseId: "DEMO1001", activityGroupId: "DEMO1001:NOPE", optionId: "y" }))).status,
+    ).toBe(400);
+
+    // A course must be selected before one of its activity options can be set.
+    expect(
+      (await postActivitySelection(new URLSearchParams({ action: "set", courseId: "DEMO1003", activityGroupId: "DEMO1003:LAB", optionId: "DEMO1003:LAB:1" }))).status,
+    ).toBe(400);
+
+    await select("DEMO1001", "add");
+    // An option id that belongs to a different activity group entirely.
+    expect(
+      (await postActivitySelection(new URLSearchParams({ action: "set", courseId: "DEMO1001", activityGroupId: "DEMO1001:TUT", optionId: "DEMO1001:LEC:1" }))).status,
+    ).toBe(400);
+    await select("DEMO1001", "remove"); // leave the shared test DB clean
+  });
+
+  // (13) SSE continues streaming after the domain extension
+  it("an activity-option change produces an SSE event of kind \"activity\"", async () => {
+    await select("DEMO1003", "add");
+
+    const stream = await fetch(new URL("/api/events", baseUrl));
+    const reader = stream.body?.getReader();
+    if (!reader) throw new Error("no response body");
+
+    await setOption("DEMO1003", "DEMO1003:LAB", "DEMO1003:LAB:2");
+
+    const decoder = new TextDecoder();
+    let received = "";
+    while (!received.includes("DEMO1003:LAB")) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("stream ended before the event arrived");
+      received += decoder.decode(value, { stream: true });
+    }
+    await reader.cancel();
+    expect(received).toContain(`"kind":"activity"`);
+    expect(received).toContain(`"optionId":"DEMO1003:LAB:2"`);
+
+    await select("DEMO1003", "remove"); // leave the shared test DB clean
   }, 10_000);
 });

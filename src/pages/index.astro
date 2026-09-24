@@ -4,12 +4,16 @@ import {
   DAY_START_HOUR,
   DEMO_CATALOGUE,
   WEEKDAYS,
+  type ActivityGroup,
+  type ActivityOption,
   type DemoCourse,
+  type Weekday,
 } from "../lib/catalogue";
-import { listSelectedCourseIds } from "../lib/db";
+import { listSelectedActivityOptions, listSelectedCourseIds } from "../lib/db";
 import "../styles.css";
 
-const selectedIds = new Set(listSelectedCourseIds());
+const selectedCourseIds = new Set(listSelectedCourseIds());
+const selectedOptions = listSelectedActivityOptions();
 
 const hours: number[] = [];
 for (let hour = DAY_START_HOUR; hour < DAY_END_HOUR; hour++) {
@@ -20,15 +24,44 @@ function hourLabel(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00–${String(hour + 1).padStart(2, "0")}:00`;
 }
 
-function coursesAt(day: string, hour: number): DemoCourse[] {
-  return DEMO_CATALOGUE.filter((course) =>
-    course.sessions.some(
-      (session) =>
-        session.day === day &&
-        hour >= Number(session.start.slice(0, 2)) &&
-        hour < Number(session.end.slice(0, 2)),
-    ),
+interface RenderedBlock {
+  course: DemoCourse;
+  group: ActivityGroup;
+  option: ActivityOption;
+}
+
+// Built only from a course that is actually selected plus an activity
+// option that is actually chosen in SQLite — never from a required activity
+// that merely exists in the catalogue, and never from a multi-option group
+// with no choice made yet. This is the one place the timetable is derived,
+// so a reload always reconstructs the same view from SQLite + catalogue data.
+const renderedBlocks: RenderedBlock[] = [];
+for (const course of DEMO_CATALOGUE) {
+  if (!selectedCourseIds.has(course.id)) continue;
+  for (const group of course.activities) {
+    const optionId = selectedOptions[group.id];
+    if (!optionId) continue;
+    const option = group.options.find((candidate) => candidate.id === optionId);
+    if (!option) continue;
+    renderedBlocks.push({ course, group, option });
+  }
+}
+
+function blocksAt(day: Weekday, hour: number): RenderedBlock[] {
+  return renderedBlocks.filter(
+    (block) =>
+      block.option.day === day &&
+      hour >= Number(block.option.start.slice(0, 2)) &&
+      hour < Number(block.option.end.slice(0, 2)),
   );
+}
+
+// A cell clashes when it holds more than one block and at least one of them
+// is not overlap-allowed. Two overlap-allowed drop-ins can share a slot with
+// no clash; a required lecture sharing a slot with anything else is a clash,
+// shown rather than hidden.
+function isClash(blocks: RenderedBlock[]): boolean {
+  return blocks.length > 1 && !blocks.every((block) => block.group.overlapAllowed);
 }
 ---
 
@@ -47,37 +80,117 @@ function coursesAt(day: string, hour: number): DemoCourse[] {
     <main>
       <h1>Timetable planner</h1>
       <p>
-        Demo prototype: the courses below are fictional demo data, not real
-        ANU offerings. Add or remove one and the timetable updates on this
-        same page as soon as the server confirms the change; reload the page
-        and your selection is still here.
+        Demo prototype: the courses and activity times below are fictional
+        demo data, not real ANU offerings. Add or remove a course and the
+        timetable updates on this same page as soon as the server confirms
+        the change, including every activity time you have chosen; reload
+        the page and your selections are still here.
       </p>
       <p id="selection-status" role="status" aria-live="polite"></p>
       <div class="planner">
         <section aria-labelledby="catalogue-heading" class="catalogue">
           <h2 id="catalogue-heading">Course catalogue</h2>
+          <p class="catalogue-actions">
+            <button type="button" id="fill-fixed-button">Fill fixed activities</button>
+            <span class="hint">
+              Auto-selects every required activity that has only one time,
+              for your selected courses. It never chooses between multiple
+              options for you.
+            </span>
+          </p>
           <ul id="catalogue-list">
             {
               DEMO_CATALOGUE.map((course) => {
-                const selected = selectedIds.has(course.id);
+                const selected = selectedCourseIds.has(course.id);
                 return (
-                  <li>
-                    <span class="course-name">
-                      {course.title} <span class="course-id">({course.id})</span>
-                    </span>
-                    <span class="course-sessions">
-                      {course.sessions
-                        .map((session) => `${session.day} ${session.start}–${session.end}`)
-                        .join(", ")}
-                    </span>
-                    <button
-                      type="button"
-                      data-course-id={course.id}
-                      data-selected={selected ? "true" : "false"}
-                      aria-pressed={selected ? "true" : "false"}
-                    >
-                      {selected ? "Remove" : "Add"}
-                    </button>
+                  <li class="course" data-course-id={course.id} style={`--course-colour: ${course.colour}`}>
+                    <div class="course-row">
+                      <span class="course-name">
+                        <span class="colour-swatch" aria-hidden="true" />
+                        {course.title} <span class="course-id">({course.id})</span>
+                      </span>
+                      <button
+                        type="button"
+                        data-course-id={course.id}
+                        data-selected={selected ? "true" : "false"}
+                        aria-pressed={selected ? "true" : "false"}
+                      >
+                        {selected ? "Remove" : "Add"}
+                      </button>
+                    </div>
+                    <div class="activity-groups" data-course-id={course.id} hidden={!selected}>
+                      {course.activities.map((group) => {
+                        const optionId = selectedOptions[group.id];
+
+                        if (group.required && group.options.length === 1) {
+                          const option = group.options[0];
+                          const included = Boolean(optionId);
+                          return (
+                            <div class="activity-group activity-fixed" data-activity-group-id={group.id}>
+                              <span class="activity-label">
+                                {group.type} <span class="activity-tag">required · fixed</span>
+                              </span>
+                              <span class="activity-time">
+                                {option.day} {option.start}–{option.end}
+                              </span>
+                              <span
+                                class="activity-fill-status"
+                                data-role="fill-status"
+                                data-activity-group-id={group.id}
+                              >
+                                {included
+                                  ? "Included in timetable"
+                                  : 'Not yet in timetable — use "Fill fixed activities"'}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <fieldset
+                            class="activity-group"
+                            data-activity-group-id={group.id}
+                            data-course-id={course.id}
+                          >
+                            <legend>
+                              {group.type}{" "}
+                              <span class="activity-tag">
+                                {group.required ? "required" : "optional"}
+                                {group.overlapAllowed ? " · overlap allowed" : ""}
+                              </span>
+                            </legend>
+                            {!group.required && (
+                              <label class="activity-option">
+                                <input
+                                  type="radio"
+                                  name={`activity-${group.id}`}
+                                  value="none"
+                                  checked={!optionId}
+                                  data-activity-group-id={group.id}
+                                  data-course-id={course.id}
+                                />
+                                <span>None</span>
+                              </label>
+                            )}
+                            {group.options.map((option) => (
+                              <label class="activity-option">
+                                <input
+                                  type="radio"
+                                  name={`activity-${group.id}`}
+                                  value={option.id}
+                                  checked={optionId === option.id}
+                                  data-activity-group-id={group.id}
+                                  data-course-id={course.id}
+                                />
+                                <span>
+                                  {option.day} {option.start}–{option.end}
+                                </span>
+                              </label>
+                            ))}
+                          </fieldset>
+                        );
+                      })}
+                    </div>
                   </li>
                 );
               })
@@ -97,19 +210,26 @@ function coursesAt(day: string, hour: number): DemoCourse[] {
               {hours.map((hour) => (
                 <tr>
                   <th scope="row">{hourLabel(hour)}</th>
-                  {WEEKDAYS.map((day) => (
-                    <td>
-                      {coursesAt(day, hour).map((course) => (
-                        <span
-                          class="block"
-                          data-course-id={course.id}
-                          hidden={!selectedIds.has(course.id)}
-                        >
-                          {course.title}
-                        </span>
-                      ))}
-                    </td>
-                  ))}
+                  {WEEKDAYS.map((day) => {
+                    const blocks = blocksAt(day, hour);
+                    const clash = isClash(blocks);
+                    return (
+                      <td class={clash ? "clash" : undefined}>
+                        {blocks.map((block) => (
+                          <span
+                            class="block"
+                            style={`--course-colour: ${block.course.colour}`}
+                            data-course-id={block.course.id}
+                            data-activity-group-id={block.group.id}
+                            data-option-id={block.option.id}
+                          >
+                            {block.course.id} / {block.group.type} / {block.option.start}–{block.option.end}
+                          </span>
+                        ))}
+                        {clash && <span class="clash-label">Clash</span>}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -118,59 +238,109 @@ function coursesAt(day: string, hour: number): DemoCourse[] {
       </div>
     </main>
     <script>
-      const catalogueList = document.querySelector("#catalogue-list");
       const status = document.querySelector("#selection-status");
 
-      function applySelectionChange(courseId: string, selected: boolean) {
-        const button = catalogueList?.querySelector<HTMLButtonElement>(
-          `button[data-course-id="${courseId}"]`,
-        );
-        if (button) {
-          button.dataset.selected = String(selected);
-          button.setAttribute("aria-pressed", String(selected));
-          button.textContent = selected ? "Remove" : "Add";
-        }
-        document
-          .querySelectorAll<HTMLElement>(`.block[data-course-id="${courseId}"]`)
-          .forEach((block) => {
-            block.hidden = !selected;
-          });
+      function report(message: string) {
+        if (status) status.textContent = message;
       }
 
-      catalogueList?.addEventListener("click", async (event) => {
-        const button = (event.target as HTMLElement)?.closest<HTMLButtonElement>(
-          "button[data-course-id]",
-        );
-        if (!button) return;
+      // The server-rendered markup (this same page) is the single source of
+      // truth for how selection state renders — the client never reimplements
+      // clash detection, colours, or required/optional labelling. After any
+      // mutation, or any cross-tab notification, it re-fetches this page and
+      // swaps in the freshly rendered catalogue and timetable, so what's on
+      // screen can never drift from SQLite + catalogue data.
+      async function refreshFromServer(): Promise<void> {
+        const response = await fetch("/");
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
 
-        const courseId = button.dataset.courseId!;
-        const action = button.dataset.selected === "true" ? "remove" : "add";
+        const freshCatalogue = doc.querySelector("#catalogue-list");
+        const currentCatalogue = document.querySelector("#catalogue-list");
+        if (freshCatalogue && currentCatalogue) currentCatalogue.replaceWith(freshCatalogue);
 
-        button.disabled = true;
-        if (status) status.textContent = "";
+        const freshTimetable = doc.querySelector("#timetable");
+        const currentTimetable = document.querySelector("#timetable");
+        if (freshTimetable && currentTimetable) currentTimetable.replaceWith(freshTimetable);
+      }
+
+      document.querySelector(".catalogue")?.addEventListener("click", async (event) => {
+        const target = event.target as HTMLElement;
+
+        if (target.id === "fill-fixed-button") {
+          const button = target as HTMLButtonElement;
+          button.disabled = true;
+          report("");
+          try {
+            const response = await fetch("/api/activity-selection", {
+              method: "POST",
+              body: new URLSearchParams({ action: "fill-fixed" }),
+            });
+            if (!response.ok) throw new Error(await response.text());
+            await refreshFromServer();
+          } catch {
+            report("Could not fill fixed activities. Please try again.");
+          } finally {
+            button.disabled = false;
+          }
+          return;
+        }
+
+        const courseButton = target.closest<HTMLButtonElement>("button[data-course-id]");
+        if (!courseButton) return;
+
+        const courseId = courseButton.dataset.courseId!;
+        const action = courseButton.dataset.selected === "true" ? "remove" : "add";
+
+        courseButton.disabled = true;
+        report("");
         try {
           const response = await fetch("/api/selection", {
             method: "POST",
             body: new URLSearchParams({ courseId, action }),
           });
-          if (!response.ok) {
-            throw new Error(await response.text());
-          }
-          const change = await response.json();
-          applySelectionChange(change.courseId, change.selected);
+          if (!response.ok) throw new Error(await response.text());
+          await refreshFromServer();
         } catch {
-          if (status) {
-            status.textContent = `Could not update ${courseId} — your previous selection is unchanged. Please try again.`;
-          }
+          report(`Could not update ${courseId} — your previous selection is unchanged. Please try again.`);
         } finally {
-          button.disabled = false;
+          courseButton.disabled = false;
+        }
+      });
+
+      document.querySelector(".catalogue")?.addEventListener("change", async (event) => {
+        const input = event.target as HTMLInputElement;
+        if (input.type !== "radio" || !input.dataset.activityGroupId) return;
+
+        const courseId = input.dataset.courseId!;
+        const activityGroupId = input.dataset.activityGroupId!;
+        const optionId = input.value;
+
+        input.disabled = true;
+        report("");
+        try {
+          const response = await fetch("/api/activity-selection", {
+            method: "POST",
+            body:
+              optionId === "none"
+                ? new URLSearchParams({ action: "clear", courseId, activityGroupId })
+                : new URLSearchParams({ action: "set", courseId, activityGroupId, optionId }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          await refreshFromServer();
+        } catch {
+          report(`Could not update ${activityGroupId} — your previous selection is unchanged. Please try again.`);
+          // The browser already flipped this radio's checked state on click;
+          // re-render from the server to revert it on failure.
+          await refreshFromServer();
+        } finally {
+          input.disabled = false;
         }
       });
 
       const source = new EventSource("/api/events");
-      source.addEventListener("message", (event) => {
-        const change = JSON.parse(event.data);
-        applySelectionChange(change.courseId, change.selected);
+      source.addEventListener("message", () => {
+        refreshFromServer();
       });
     </script>
   </body>
