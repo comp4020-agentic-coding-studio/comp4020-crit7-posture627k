@@ -1,10 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { type Message, messages } from "./schema";
+import { selectedCourses } from "./schema";
 
 // One SQLite file is the app's whole persistent state. In production
 // fly.toml points DATABASE_PATH at the machine's volume (/data), which is
@@ -24,12 +24,24 @@ export const db = drizzle(client);
 // commit the migration it writes to drizzle/.
 migrate(db, { migrationsFolder: "./drizzle" });
 
-export type { Message };
+// SQLite is authoritative for the selection: the SSE stream only notifies
+// other open tabs that a change happened, it never carries the state itself.
 
-export function listMessages(): Message[] {
-  return db.select().from(messages).orderBy(desc(messages.id)).limit(50).all();
+export function listSelectedCourseIds(): string[] {
+  return db
+    .select()
+    .from(selectedCourses)
+    .all()
+    .map((row) => row.courseId);
 }
 
-export function addMessage(body: string): Message {
-  return db.insert(messages).values({ body }).returning().get();
+// Idempotent: selecting an already-selected course leaves the table
+// unchanged instead of erroring on the primary-key conflict.
+export function selectCourse(courseId: string): void {
+  db.insert(selectedCourses).values({ courseId }).onConflictDoNothing().run();
+}
+
+// Idempotent: removing a course that isn't selected is a no-op delete.
+export function deselectCourse(courseId: string): void {
+  db.delete(selectedCourses).where(eq(selectedCourses.courseId, courseId)).run();
 }

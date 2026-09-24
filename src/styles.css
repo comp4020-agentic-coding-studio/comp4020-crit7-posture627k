@@ -7,7 +7,7 @@ body {
 }
 
 main {
-  max-width: 40rem;
+  max-width: 60rem;
   margin: 0 auto;
 }
 
@@ -15,26 +15,92 @@ a {
   color: #0b5fff;
 }
 
-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin-block: 1.5rem;
-}
-
-input {
-  flex: 1;
-  min-width: 12rem;
-  padding: 0.4rem 0.6rem;
-  font: inherit;
-}
-
 button {
   padding: 0.4rem 1rem;
   font: inherit;
 }
 
-#messages {
-  padding-inline-start: 1.2rem;
+#selection-status {
+  color: #b00020;
+  min-height: 1.4em;
+}
+
+.planner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 45rem) {
+  .planner {
+    grid-template-columns: 1fr;
+  }
+}
+
+#catalogue-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#catalogue-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.course-name {
+  font-weight: 600;
+}
+
+.course-id {
+  font-weight: 400;
+  color: #555;
+}
+
+.course-sessions {
+  color: #555;
+  font-size: 0.9em;
+  flex-basis: 100%;
+}
+
+#catalogue-list button[aria-pressed="true"] {
+  background: #0b5fff;
+  color: #fff;
+  border-color: #0b5fff;
+}
+
+#timetable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+#timetable th,
+#timetable td {
+  border: 1px solid #ddd;
+  padding: 0.3rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+#timetable th[scope="row"] {
+  white-space: nowrap;
+  font-weight: 400;
+  color: #555;
+}
+
+.block {
+  display: block;
+  background: #e6efff;
+  border: 1px solid #0b5fff;
+  border-radius: 0.2rem;
+  padding: 0.15rem 0.3rem;
 }

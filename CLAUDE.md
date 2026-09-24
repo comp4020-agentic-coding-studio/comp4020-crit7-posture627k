@@ -59,9 +59,12 @@ agent should behave while building toward it.
 ## Testing rules
 
 - Do not delete or weaken `spec/invariants.test.ts` or `spec/readme.test.ts`.
-- `spec/guestbook.test.ts` retires only once the guestbook functionality it
-  probes has actually been replaced by timetable-domain product tests — not
-  before, and not by just deleting it early.
+- `spec/guestbook.test.ts` has retired: its two platform claims (persistence
+  across a reload, an SSE broadcast on a successful write) are now asserted
+  against the timetable domain in `spec/timetable.test.ts` instead. Any future
+  retirement of a supplied starter test follows the same rule: only once the
+  functionality it probes has actually been replaced by product tests, never
+  by deleting it early.
 - New tests should assert externally visible contracts (what a page must do)
   rather than internal implementation details, so they survive a change of
   approach.

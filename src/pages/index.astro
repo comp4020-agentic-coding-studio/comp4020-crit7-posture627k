@@ -1,8 +1,35 @@
 ---
-import { listMessages } from "../lib/db";
+import {
+  DAY_END_HOUR,
+  DAY_START_HOUR,
+  DEMO_CATALOGUE,
+  WEEKDAYS,
+  type DemoCourse,
+} from "../lib/catalogue";
+import { listSelectedCourseIds } from "../lib/db";
 import "../styles.css";
 
-const messages = listMessages();
+const selectedIds = new Set(listSelectedCourseIds());
+
+const hours: number[] = [];
+for (let hour = DAY_START_HOUR; hour < DAY_END_HOUR; hour++) {
+  hours.push(hour);
+}
+
+function hourLabel(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00–${String(hour + 1).padStart(2, "0")}:00`;
+}
+
+function coursesAt(day: string, hour: number): DemoCourse[] {
+  return DEMO_CATALOGUE.filter((course) =>
+    course.sessions.some(
+      (session) =>
+        session.day === day &&
+        hour >= Number(session.start.slice(0, 2)) &&
+        hour < Number(session.end.slice(0, 2)),
+    ),
+  );
+}
 ---
 
 <!doctype html>
@@ -10,43 +37,140 @@ const messages = listMessages();
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>COMP4020 prototype</title>
+    <title>Timetable planner — COMP4020 prototype</title>
   </head>
   <body>
     <nav aria-label="site">
-      <a href="/">Guestbook</a>
+      <a href="/">Planner</a>
       <a href="/readme/">About</a>
     </nav>
     <main>
-      <h1>Guestbook</h1>
+      <h1>Timetable planner</h1>
       <p>
-        A minimal full-stack starter: messages live in SQLite on the machine's
-        volume (state survives a reload and a redeploy), and new messages
-        appear in every open tab over a server-sent-events stream — open this
-        page twice and sign it in one. Replace all of this with your own
-        prototype.
+        Demo prototype: the courses below are fictional demo data, not real
+        ANU offerings. Add or remove one and the timetable updates on this
+        same page as soon as the server confirms the change; reload the page
+        and your selection is still here.
       </p>
-      <form method="post" action="/api/messages">
-        <label for="body">Leave a message</label>
-        <input id="body" name="body" required maxlength="500" />
-        <button>Sign</button>
-      </form>
-      <ul id="messages">
-        {messages.map((message) => <li>{message.body}</li>)}
-      </ul>
+      <p id="selection-status" role="status" aria-live="polite"></p>
+      <div class="planner">
+        <section aria-labelledby="catalogue-heading" class="catalogue">
+          <h2 id="catalogue-heading">Course catalogue</h2>
+          <ul id="catalogue-list">
+            {
+              DEMO_CATALOGUE.map((course) => {
+                const selected = selectedIds.has(course.id);
+                return (
+                  <li>
+                    <span class="course-name">
+                      {course.title} <span class="course-id">({course.id})</span>
+                    </span>
+                    <span class="course-sessions">
+                      {course.sessions
+                        .map((session) => `${session.day} ${session.start}–${session.end}`)
+                        .join(", ")}
+                    </span>
+                    <button
+                      type="button"
+                      data-course-id={course.id}
+                      data-selected={selected ? "true" : "false"}
+                      aria-pressed={selected ? "true" : "false"}
+                    >
+                      {selected ? "Remove" : "Add"}
+                    </button>
+                  </li>
+                );
+              })
+            }
+          </ul>
+        </section>
+        <section aria-labelledby="timetable-heading" class="timetable">
+          <h2 id="timetable-heading">Weekly timetable</h2>
+          <table id="timetable">
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                {WEEKDAYS.map((day) => <th scope="col">{day}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {hours.map((hour) => (
+                <tr>
+                  <th scope="row">{hourLabel(hour)}</th>
+                  {WEEKDAYS.map((day) => (
+                    <td>
+                      {coursesAt(day, hour).map((course) => (
+                        <span
+                          class="block"
+                          data-course-id={course.id}
+                          hidden={!selectedIds.has(course.id)}
+                        >
+                          {course.title}
+                        </span>
+                      ))}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </div>
     </main>
     <script>
-      // The live half of the demo: subscribe to the SSE stream and prepend
-      // messages as they arrive. The form itself needs none of this — its
-      // POST + redirect re-renders the submitting tab from SQLite; this
-      // stream is how every other tab finds out.
-      const list = document.querySelector("#messages");
+      const catalogueList = document.querySelector("#catalogue-list");
+      const status = document.querySelector("#selection-status");
+
+      function applySelectionChange(courseId: string, selected: boolean) {
+        const button = catalogueList?.querySelector<HTMLButtonElement>(
+          `button[data-course-id="${courseId}"]`,
+        );
+        if (button) {
+          button.dataset.selected = String(selected);
+          button.setAttribute("aria-pressed", String(selected));
+          button.textContent = selected ? "Remove" : "Add";
+        }
+        document
+          .querySelectorAll<HTMLElement>(`.block[data-course-id="${courseId}"]`)
+          .forEach((block) => {
+            block.hidden = !selected;
+          });
+      }
+
+      catalogueList?.addEventListener("click", async (event) => {
+        const button = (event.target as HTMLElement)?.closest<HTMLButtonElement>(
+          "button[data-course-id]",
+        );
+        if (!button) return;
+
+        const courseId = button.dataset.courseId!;
+        const action = button.dataset.selected === "true" ? "remove" : "add";
+
+        button.disabled = true;
+        if (status) status.textContent = "";
+        try {
+          const response = await fetch("/api/selection", {
+            method: "POST",
+            body: new URLSearchParams({ courseId, action }),
+          });
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+          const change = await response.json();
+          applySelectionChange(change.courseId, change.selected);
+        } catch {
+          if (status) {
+            status.textContent = `Could not update ${courseId} — your previous selection is unchanged. Please try again.`;
+          }
+        } finally {
+          button.disabled = false;
+        }
+      });
+
       const source = new EventSource("/api/events");
       source.addEventListener("message", (event) => {
-        const message = JSON.parse(event.data);
-        const item = document.createElement("li");
-        item.textContent = message.body;
-        list?.prepend(item);
+        const change = JSON.parse(event.data);
+        applySelectionChange(change.courseId, change.selected);
       });
     </script>
   </body>

@@ -1,18 +1,15 @@
-import { sql } from "drizzle-orm";
-import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-// The schema is the ground truth for the database. To change it: edit here,
-// run `pnpm db:generate` to turn the diff into a migration under drizzle/,
-// and commit both — the migration applies automatically when the server
-// boots (see src/lib/db.ts), locally and deployed. Never edit the database
-// by hand: state on the deployed volume outlives every deploy, and the
-// migration trail is what keeps old state and new code compatible.
-export const messages = sqliteTable("messages", {
-  id: int().primaryKey({ autoIncrement: true }),
-  body: text().notNull(),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(datetime('now'))`),
+// The prototype's only persisted domain concept: which demo courses (see
+// src/lib/catalogue.ts for the catalogue itself) are currently selected.
+// There are no user accounts in this prototype, so this is one shared
+// planner selection: a row's presence means that course id is selected, and
+// there is nothing else to store. To change it: edit here, run
+// `pnpm db:generate` to turn the diff into a migration under drizzle/, and
+// commit both — the migration applies automatically when the server boots
+// (see src/lib/db.ts). Never edit the database by hand.
+export const selectedCourses = sqliteTable("selected_courses", {
+  courseId: text("course_id").primaryKey(),
 });
 
-export type Message = typeof messages.$inferSelect;
+export type SelectedCourse = typeof selectedCourses.$inferSelect;
