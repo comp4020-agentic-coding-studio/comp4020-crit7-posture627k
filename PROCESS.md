@@ -336,10 +336,32 @@ change was verified at the rendered-HTML/CSS level, not by looking at it on
 screen; a human visual check in a real browser is still required to confirm
 how the enlarged timetable actually reads.
 
+## Final human review
+
+The corrected version (the fixed-fill UX change and the enlarged timetable,
+above) was deployed to production with `flyctl deploy --remote-only --ha=false
+-a comp4020-crit7-posture627k`. That deploy was itself checked from this
+environment at the HTTP level — real requests against the live URL walking
+the add → fill-fixed → repeat → remove → reload contract, and inspecting the
+production-served HTML/CSS for the enlarged layout — since no real browser
+could be driven here.
+
+After that, the user opened the real Fly.io deployment in an actual browser
+and reported back: human visual acceptance passed. That is the only claim
+made here about that browser session — this document does not extend it into
+a claim about any specific interaction (such as a two-tab live-update check)
+that wasn't separately confirmed.
+
+This is the reason automated tests and protocol/HTTP-level checks were run
+throughout this project but were never treated as sufficient on their own:
+they can confirm a route returns the right JSON or that a CSS rule reached
+production, but they cannot judge whether a timetable actually reads
+comfortably at a glance, whether a colour is legible, or whether an
+interaction feels responsive. Both defects this iteration fixed — the
+apparently-broken fill button and the undersized timetable — were found this
+way, by a human looking at the running product, not by `spec/`.
+
 ## Before you ship
 
-`reflections/crit-7.md` still does not exist. This is intentional, not an
-oversight: the reflection is deferred until after this implementation has
-actually been deployed and exercised in production, so it can describe a
-real outcome instead of a predicted one. `pnpm check:evidence` is expected
-to fail only on that missing file until then.
+`reflections/crit-7.md` now exists, written after this deployment and its
+human review, so it describes an actual outcome rather than a predicted one.
