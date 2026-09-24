@@ -1,54 +1,58 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-Written by you, for a reader: how you got from the brief to the harness and
-agentic workflow behind this submission. Markers read this file and follow its
-citations; they don't trawl the repo for evidence you didn't point at.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-A sentence or two. `README.md` is where the account of what the app is and what
-good means here lives; this file is how you got there.
+Nothing yet. This document currently records the audit and design work done
+*before* touching application code: establishing the untouched starter
+baseline, locking a product scope, and designing (but not yet implementing)
+the timetable-domain replacement for the Guestbook starter. `README.md`
+describes the product contract this work is building toward.
 
 ## How I got here
 
-The account of the process: how the work actually went, and how you knew the
-result was right. Tell it in whatever order makes it clear. A weekly prototype
-needs a paragraph or two; an assignment needs more.
+**Baseline audit.** Starting from this repo's starting commits —
+[`9260e7d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-posture627k/commit/9260e7dd06ba3b600acf301286c23e5ecda52ad6)
+(initial commit) and
+[`e1fef6a`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit7-posture627k/commit/e1fef6ae82fa7d0a4a88b9c3edde3043a4ebf0d7)
+(the course's automated template resync) — the untouched Guestbook starter
+was cloned, its toolchain verified against `mise.toml` (Node 24, pnpm
+11.9.0), and dependencies installed with `pnpm install --frozen-lockfile`.
+`pnpm check` passed in full on this unmodified starter: 0 typecheck errors
+and 28/28 tests green. `pnpm check:evidence` failed in the expected way for
+an unstarted submission: `PROCESS.md` still carried its template comment,
+neither of its two placeholder commit citations resolved, and no
+`reflections/crit-7.md` existed yet. The running dev server was exercised
+manually — page load, message submission, reload persistence, and the SSE
+live-update stream all worked as the starter claims.
 
-Cite the record as you go, as links whose text is the commit hash or range and
-whose target is this repo's commit or compare URL, so a reader clicks straight
-to the evidence:
+**Scope decision.** The product direction was fixed as a same-page ANU
+timetable planner: course-selection controls and the weekly timetable share
+one interaction context, so adding or removing a demo course changes the
+visible timetable immediately, with no navigation to a separate page. This
+is explicitly one narrow interaction slice, not a MyTimetable replacement —
+no ANU authentication, real enrolment, live MyTimetable integration, or full
+course catalogue.
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+**SSE decision.** Because `.github/workflows/checks.yml`'s deploy job
+already probes `/api/events` in production ("Verify the live-update stream
+is streaming"), the decision was made to preserve and repurpose the existing
+SSE channel for timetable selection-change broadcasts rather than deleting
+it — deleting it would break the existing production contract, not just
+remove a feature.
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
-
-> the prompt, verbatim
-
-Screenshots are welcome where one carries the point better than a sentence does.
-Commit the file to this repo and link it with a **relative** path, which is what
-makes it render on GitHub: `![alt text](docs/before.png)`. Images don't count
-towards the word count and don't replace the citation.
+**Documentation and design pass.** `README.md` and `CLAUDE.md` were rewritten
+to state the locked product contract and the harness rules that follow from
+it. An implementation design (data ownership, database shape, request flow,
+the immediate-update mechanism, the SSE repurposing plan, the timetable UI
+layout, the demo dataset, and the test-replacement plan) was produced for
+review, but no application code — schema, routes, pages, or tests — has been
+changed yet.
 
 ## Before you ship
 
-`pnpm check:evidence` verifies that this comment is gone, that your citations
-resolve to real commits, that a crit week's reflection entry is in
-`reflections/`, and that your `CLAUDE.md` is there. It checks that your account
-is traceable, not that it is good: that is the marker's call.
-
-Images aren't checked: unlike a citation whose SHA doesn't resolve, a broken
-image is visible the moment this file is rendered on GitHub.
+`pnpm check:evidence` cannot pass yet, and this is expected, not a bug: no
+`reflections/crit-7.md` exists, because the reflection asks what the work
+changed and what breakthrough moved it forward, and no implementation has
+happened yet to answer that honestly. That file is intentionally deferred to
+the final phase. Once implementation work is committed, this document will
+be updated again with citations to those commits.
